@@ -143,7 +143,7 @@ def get_all_job_urls(base_url_template):
 
 def main():
     base_url_template = "https://careerviet.vn/viec-lam/cntt-phan-cung-mang-cntt-phan-mem-c63,1-trang-{page_num}-vi.html"
-    output_filename = "careerviet_jobs.jsonl"
+    output_filename = "../careerviet_jobs.jsonl"
 
     if os.path.exists(output_filename):
         os.remove(output_filename)

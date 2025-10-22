@@ -202,7 +202,7 @@ def get_all_job_urls(base_url_template):
 
 def main():
     base_url_template = "https://www.topcv.vn/viec-lam-it?page={page_num}"
-    output_filename = "careerviet_jobs.jsonl"
+    output_filename = "../careerviet_jobs.jsonl"
 
     if os.path.exists(output_filename):
         os.remove(output_filename)
