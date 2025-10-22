@@ -14,12 +14,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 # --- Cấu hình ---
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-BATCH_SIZE = 25  # Xử lý 25 công việc rồi khởi động lại trình duyệt
+BATCH_SIZE = 25
 
 
 def setup_driver():
-    """Cấu hình và khởi tạo ChromeDriver với các tùy chọn nâng cao."""
-    # ... (Hàm này không thay đổi) ...
     chrome_options = Options()
     chrome_options.add_argument("--app")
     chrome_options.add_argument(f"--window-size={SCREEN_WIDTH},{SCREEN_HEIGHT}")
@@ -44,7 +42,6 @@ def setup_driver():
 
 def extract_job_details(html_content, job_url):
     """Trích xuất chi tiết công việc từ nội dung HTML bằng BeautifulSoup."""
-    # ... (Hàm này không thay đổi) ...
     soup = BeautifulSoup(html_content, "html.parser")
     job_details = {"url": job_url, "tieu_de": "N/A", "luong": "N/A", "kinh_nghiem": "N/A", "cap_bac": "N/A",
                    "nganh_nghe": [], "phuc_loi": [], "mo_ta_cong_viec": "", "yeu_cau_cong_viec": "",
@@ -104,7 +101,6 @@ def extract_job_details(html_content, job_url):
 
 def get_all_job_urls(base_url_template):
     """Giai đoạn 1: Dùng một driver để thu thập tất cả URL công việc."""
-    # ... (Hàm này không thay đổi) ...
     print("--- GIAI ĐOẠN 1: Bắt đầu thu thập tất cả URL công việc ---")
     driver = setup_driver()
     all_unique_urls = set()
@@ -155,7 +151,6 @@ def main():
         print(f"Đã xóa file cũ: {output_filename}")
 
     # Giai đoạn 1: Lấy tất cả URL (sử dụng phiên bản test 1 trang nếu cần)
-    # all_job_urls = get_all_job_urls(base_url_template, max_pages=1) # Dùng để test
     all_job_urls = get_all_job_urls(base_url_template)  # Dùng để chạy thật
 
     if not all_job_urls:
@@ -225,5 +220,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Nhớ định nghĩa các hàm khác (setup_driver, extract_job_details, get_all_job_urls) ở trên
     main()
