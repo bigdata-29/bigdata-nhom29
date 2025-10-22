@@ -10,7 +10,6 @@ import time
 import json
 import os
 from webdriver_manager.chrome import ChromeDriverManager
-
 # --- Cấu hình ---
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
