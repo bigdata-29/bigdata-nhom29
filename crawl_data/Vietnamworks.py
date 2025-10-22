@@ -208,13 +208,14 @@ def fetch_with_selenium(url, driver, wait_time=5, silent=False):
         return None
 
 # ===================================
-# MAIN
+# MAIN - TỰ ĐỘNG CRAWL NHIỀU TRANG
 # ===================================
 if __name__ == "__main__":
     SEARCH_URL = "https://www.vietnamworks.com/viec-lam?g=5"
-    MAX_PAGES = 1
-    CRAWL_DETAIL = True
-    DELAY = 3
+    CRAWL_DETAIL = True      # crawl chi tiết từng job (nếu muốn nhanh thì False)
+    DELAY = 3                # giây nghỉ giữa các trang
+    MAX_PAGES = 30           # phòng trường hợp có hơn 15 trang
+    EXPECTED_JOBS_PER_PAGE = 50
 
     driver = setup_driver()
     all_jobs = []
@@ -223,24 +224,40 @@ if __name__ == "__main__":
     try:
         for page in range(1, MAX_PAGES + 1):
             url = f"{SEARCH_URL}&page={page}" if page > 1 else SEARCH_URL
+            print(f"\n Crawling trang {page}: {url}")
+
             html = fetch_with_selenium(url, driver, wait_time=5)
-            if html:
-                jobs = extract_job_list_vnw(html, driver=driver, crawl_detail=CRAWL_DETAIL)
-                all_jobs.extend(jobs)
-                if page < MAX_PAGES:
-                    time.sleep(DELAY)
+            if not html:
+                print(" Không tải được trang, dừng lại.")
+                break
+
+            jobs = extract_job_list_vnw(html, driver=driver, crawl_detail=CRAWL_DETAIL)
+            if not jobs:
+                print(f" Không tìm thấy công việc nào trên trang {page}, dừng lại.")
+                break
+
+            print(f" Thu được {len(jobs)} công việc trên trang {page}")
+            all_jobs.extend(jobs)
+
+            # Nếu trang hiện tại có ít hơn 50 job => có thể là trang cuối
+            if len(jobs) < EXPECTED_JOBS_PER_PAGE:
+                print(" Có vẻ đã đến trang cuối, dừng lại.")
+                break
+
+            time.sleep(DELAY)
+
     finally:
         driver.quit()
 
     elapsed_time = time.time() - start_time
-    print(f"Tổng số công việc: {len(all_jobs)} | Thời gian: {elapsed_time:.2f}s")
+    print(f"\n Tổng số công việc: {len(all_jobs)} | Thời gian: {elapsed_time:.2f}s")
 
-    # Xuất JSON
+    # Lưu ra JSON
     if all_jobs:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         json_filename = f"vietnamworks_jobs_{timestamp}.json"
         with open(json_filename, 'w', encoding='utf-8') as f:
             json.dump(all_jobs, f, ensure_ascii=False, indent=2)
-        print(f"Đã lưu JSON: {json_filename}")
+        print(f" Đã lưu JSON: {json_filename}")
     else:
         print(" Không tìm thấy công việc nào.")
