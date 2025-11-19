@@ -1,13 +1,15 @@
 import os
 import re
 import json
+import sys
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
 
 def setup_spark_session():
-    os.environ["PYSPARK_PYTHON"] = r"C:\miniconda3\python.exe"
-    os.environ["PYSPARK_DRIVER_PYTHON"] = r"C:\miniconda3\python.exe"
+    os.environ["PYSPARK_PYTHON"] = sys.executable
+    os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
     spark = (
         SparkSession.builder
@@ -96,7 +98,6 @@ def main():
                     .otherwise(F.col("dia_diem_lam_viec.thanh_pho")))
         .withColumn("Luong (VND)", parse_salary_expr(F.col("thong_tin_khac.lương")))
         .withColumn("Cach thuc lam viec", F.lit("Trực tiếp"))
-        # ======================= THAY ĐỔI LOGIC LẤY NGÀY ĐĂNG TUYỂN =======================
         .withColumn("Ngay dang tuyen",
             F.when(F.col("ngay_dang_tuyen").isNotNull() & (F.col("ngay_dang_tuyen") != "N/A"), F.col("ngay_dang_tuyen"))
              .otherwise(None)
@@ -121,7 +122,7 @@ def main():
     )
 
     print("Hoàn tất xử lý. Đang ghi dữ liệu vào preprocessed_data.jsonl ...")
-    output_file = "../preprocessed_data.jsonl"
+    output_file = "preprocessed_data.jsonl"
     try:
         rows_to_write = final_df.collect()
 
