@@ -1,185 +1,227 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# ===================================
+# JOB PREPROCESSING SCRIPT (VS CODE)
+# ===================================
 
-"""
-PySpark job preprocessing script
-Inputs: a JSON file of job postings (one JSON object per job or an array)
-Outputs: JSON result (1 file) in folder `data_json`
+# STEP 1: Setup (run once per session)
+print("Installing dependencies...")
+# Nếu chạy trên Colab thì bật 2 dòng dưới:
+# !apt-get install openjdk-11-jdk-headless -qq > /dev/null
+# !pip install -q pyspark
 
-Run:
-  spark-submit pyspark_job_preprocess.py <input_json_path>
-"""
-
+import os
 from pyspark.sql import SparkSession, functions as F, types as T
-from pyspark.sql.functions import sha2, concat_ws
-import sys
 import re
+from pyspark.sql.functions import sha2, concat_ws, col
 
-# -----------------------------------------------------------------------------
-# Init Spark
-# -----------------------------------------------------------------------------
-spark = SparkSession.builder.appName("job_preprocess").getOrCreate()
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-11-openjdk-amd64"
+print("Setup complete!\n")
 
-if len(sys.argv) < 2:
-    print("Usage: spark-submit pyspark_job_preprocess.py <input_json_path>")
-    sys.exit(1)
+# STEP 2: Create Spark Session
+print("Starting Spark session...")
+spark = SparkSession.builder \
+    .appName("job_preprocess") \
+    .config("spark.driver.memory", "2g") \
+    .config("spark.executor.memory", "2g") \
+    .config("spark.sql.shuffle.partitions", "2") \
+    .getOrCreate()
 
-input_path = sys.argv[1]
+print("Spark session started!\n")
+
+# ==============================
+# Configuration
+# ==============================
+input_path = "vietnamworks_jobs_20251028_144306.json"
+output_path = "data"
+
+# ==============================
+# Load JSON
+# ==============================
+print(f"Loading data from: {input_path}")
 df_raw = spark.read.option("multiline", True).json(input_path)
+print(f"Loaded {df_raw.count()} raw records\n")
 
-# -----------------------------------------------------------------------------
-# Helper Dictionaries / UDFs
-# -----------------------------------------------------------------------------
-city_map = {
-    r"(?i)^(hcm|tp\.hcm|ho chi minh|hochiminh|hồ chí minh|hcmc)$": "Ho Chi Minh City",
-    r"(?i)^(hn|hanoi|ha noi|hà nội)$": "Hanoi",
-    r"(?i)^(dn|da nang|đà nẵng)$": "Da Nang",
-    r"(?i)^(hp|haiphong|hải phòng)$": "Hai Phong",
-}
+# ==============================
+# UDF Definitions
+# ==============================
+USD_TO_VND = 23500
 
-@F.udf(T.StringType())
-def normalize_city(city):
-    if not city: return None
-    s = city.strip()
-    for patt, val in city_map.items():
-        if re.search(patt, s): return val
-    return s.title()
+def _salary_to_vnd(s):
+    if s is None or not s:
+        return None
 
-@F.udf(T.StructType([
-    T.StructField("min_vnd", T.LongType()),
-    T.StructField("max_vnd", T.LongType()),
-    T.StructField("currency", T.StringType())
-]))
-def parse_salary(s):
-    if not s: return (None, None, None)
-    s = s.replace('\u00a0', ' ').lower().strip()
+    s2 = str(s).lower().replace(",", "").strip()
 
-    currency = None
-    if "usd" in s: currency = "USD"
-    elif any(c in s for c in ["vnd", "₫", "đ", "dong", "tr"]): currency = "VND"
+    if "thương lượng" in s2 or "negotiable" in s2:
+        return "Thương lượng"
 
-    s = re.sub(r"/tháng|tháng|per month|/month", "", s)
-    nums = []
-    parts = re.split(r"[-–—to]+", s)
+    is_usd = any(x in s2 for x in ["$", "usd"])
+    is_year = any(x in s2 for x in ["năm", "/year", "per year", "yr", "/yr"])
 
-    for p in parts:
-        p = re.sub(r"[₫$,]|vnd|usd|đ|dong|triệu|trieu|tr", "", p.replace(" ", ""))
-        p2 = p.replace(",", "")
+    s2 = re.sub(r"/tháng|tháng|/month|per month|/yr|/năm|năm|year|/year", " ", s2)
+
+    pattern = r"(\d+(?:[\.,]\d+)?)(?:\s*)(tr|m|k)?"
+    nums = re.findall(pattern, s2)
+
+    if len(nums) == 0:
+        return None
+
+    values = []
+    for num_str, unit in nums:
+        num_str = num_str.replace(",", ".")
         try:
-            nums.append(int(float(p2)))
+            num = float(num_str)
         except:
-            pass
+            continue
 
-    if not nums: return (None, None, currency)
-    if len(nums) == 1: return (nums[0], nums[0], currency)
-    return (min(nums), max(nums), currency)
+        if unit == "tr" or unit == "m":
+            num *= 1_000_000
+        elif unit == "k":
+            num *= 1_000
 
-@F.udf(T.ArrayType(T.StringType()))
-def extract_skills(k1, k2, desc, req):
-    skills, common = [], {"java","python","sql","linux","windows","aws","azure","gcp","docker","kubernetes"}
-    for src in [k1, k2]:
-        if src:
-            if isinstance(src, list):
-                skills += [s.strip() for s in src]
-            else:
-                skills += re.split(r"[,;|]+", src)
+        if is_usd:
+            num *= USD_TO_VND
 
-    text = f"{desc} {req}"
-    tokens = re.findall(r"[A-Za-z0-9\+\#\-]{2,}", text)
-    skills += [t for t in tokens if t.lower() in common]
+        values.append(int(num))
 
-    out, seen = [], set()
-    for s in skills:
-        if s and s.lower() not in seen:
-            seen.add(s.lower())
-            out.append(s)
-    return out
+    if not values:
+        return None
 
-@F.udf(T.StringType())
-def infer_work_mode(desc, loc):
-    t = f"{desc} {loc}".lower()
-    return "remote" if any(x in t for x in ["remote", "làm từ xa", "work from home"]) else "on-site"
+    has_toi = any(x in s2 for x in ["tới", "to"])
+    if has_toi:
+        v = values[0]
+        return f"Tới {v} VND/năm" if is_year else f"Tới {v} VND/tháng"
 
-@F.udf(T.StringType())
-def normalize_date(d):
-    if not d: return None
-    d = d.strip()
-    if "hôm" in d.lower(): return None
+    if len(values) >= 2:
+        return f"{min(values)} - {max(values)} VND"
 
-    m = re.search(r"(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})", d)
+    return f"{values[0]} VND"
+
+salary_to_vnd_udf = F.udf(_salary_to_vnd, T.StringType())
+
+
+def _infer_work_mode(desc, loc):
+    desc = desc or ""
+    loc = loc or ""
+    txt = (desc + " " + loc).lower()
+
+    if any(x in txt for x in ["remote", "làm từ xa", "work from home", "work-from-home"]):
+        return "Làm từ xa"
+    if any(x in txt for x in ["hybrid", "bán thời gian tại văn phòng", "kết hợp"]):
+        return "Kết hợp"
+
+    return "Trực tiếp"
+
+infer_work_mode_udf = F.udf(_infer_work_mode, T.StringType())
+
+
+def _normalize_date(s):
+    if not s:
+        return None
+    s = str(s)
+    m = re.search(r'(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})', s)
     if m:
-        dd, mm, yy = int(m.group(1)), int(m.group(2)), int(m.group(3)) % 100
-        return f"{dd:02d}/{mm:02d}/{yy:02d}"
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3)) % 100
+        return f"{d:02d}/{mo:02d}/{y:02d}"
+
+    m2 = re.search(r'(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})', s)
+    if m2:
+        y, mo, d = int(m2.group(1)) % 100, int(m2.group(2)), int(m2.group(3))
+        return f"{d:02d}/{mo:02d}/{y:02d}"
+
     return None
 
-def benefits_to_string(b):
-    if not b: return None
-    if isinstance(b, list):
-        return " | ".join(f"{i.get('tieu_de', '')}: {i.get('mo_ta', '')}" for i in b)
-    return str(b)
+normalize_date_udf = F.udf(_normalize_date, T.StringType())
 
-spark.udf.register("benefits_to_string", F.udf(benefits_to_string, T.StringType()))
 
-# -----------------------------------------------------------------------------
-# Transform
-# -----------------------------------------------------------------------------
+def _benefits_to_string(x):
+    if x is None:
+        return None
+    if isinstance(x, list):
+        vals = []
+        for item in x:
+            if isinstance(item, dict):
+                title = item.get('tieu_de') or item.get('title') or ""
+                desc = item.get('mo_ta') or item.get('description') or ""
+                combined = f"{title}: {desc}".strip().strip(":")
+                if combined:
+                    vals.append(combined)
+            else:
+                vals.append(str(item))
+        return " | ".join(filter(None, vals))
+    return str(x)
+
+benefits_to_string_udf = F.udf(_benefits_to_string, T.StringType())
+
+# ==============================
+# Data Processing
+# ==============================
+print("Processing data...")
+
 df = df_raw.select(
-    F.coalesce("cong_ty", F.lit(None)).alias("company"),
-    F.coalesce("dia_diem", F.concat_ws(", ", "dia_diem_chi_tiet")).alias("location"),
-    "tieu_de", "luong", "mo_ta", "phuc_loi",
-    F.coalesce("ngay_dang_chi_tiet", "ngay_dang").alias("date"),
-    "ky_nang", "ky_nang_chi_tiet", "yeu_cau", "url", "cap_bac"
+    F.col('cong_ty').alias('company'),
+    F.coalesce(F.col('dia_diem'), F.concat_ws(', ', F.col('dia_diem_chi_tiet'))).alias('location'),
+    F.col('tieu_de').alias('title'),
+    F.col('luong').alias('salary_raw'),
+    F.col('mo_ta').alias('job_description'),
+    F.col('phuc_loi').alias('benefits_raw'),
+    F.coalesce(F.col('ngay_dang_chi_tiet'), F.col('ngay_dang')).alias('posted_date_raw'),
+    F.col('url')
 )
 
-df = df.withColumn("row_key",
-    F.when(F.col("url").isNotNull(), "url")
-     .otherwise(sha2(concat_ws("||","company","tieu_de","location"), 256))
-)
+# Deduplicate
+df = df.withColumn(
+    "row_key",
+    F.when(F.col("url").isNotNull(), F.col("url"))
+     .otherwise(sha2(concat_ws("||", col("company"), col("title"), col("location")), 256))
+).dropDuplicates(["row_key"])
 
-df = df.dropDuplicates(["row_key"])
+# Apply transformations
+print("Applying UDFs...")
+df = df.withColumn("Lương (VND)", salary_to_vnd_udf("salary_raw"))
+df = df.withColumn("Hình thức làm việc", infer_work_mode_udf("job_description", "location"))
+df = df.withColumn("Ngày đăng tuyển (dd/MM/yy)", normalize_date_udf("posted_date_raw"))
+df = df.withColumn("Phúc lợi", benefits_to_string_udf("benefits_raw"))
+df = df.withColumn("Thời gian làm việc", F.lit("Giờ hành chính"))
 
-parsed = (
-    df.withColumn("city", normalize_city("location"))
-      .withColumn("salary", F.expr("parse_salary(luong)"))
-      .withColumn("skills", F.expr("extract_skills(ky_nang, ky_nang_chi_tiet, mo_ta, yeu_cau)"))
-      .withColumn("work_mode", F.expr("infer_work_mode(mo_ta, location)"))
-      .withColumn("posted_date", F.expr("normalize_date(date)"))
-      .withColumn("benefits", F.expr("benefits_to_string(phuc_loi)"))
-)
-
-final = parsed.select(
-    F.col("company").alias("Tên công ty"),
-    F.col("location").alias("Địa chỉ"),
-    F.col("city").alias("Thành phố"),
-    F.col("tieu_de").alias("Vị trí tuyển dụng"),
-    F.col("salary.min_vnd").alias("Lương tối thiểu (VND)"),
-    F.col("salary.max_vnd").alias("Lương tối đa (VND)"),
-    F.col("salary.currency").alias("Đơn vị tiền tệ"),
-    "work_mode",
-    "skills",
-    F.col("posted_date").alias("Ngày đăng tuyển (dd/MM/yy)"),
-    F.col("mo_ta").alias("Mô tả công việc"),
-    "benefits",
-    F.col("cap_bac").alias("Cấp bậc / Thời gian làm việc"),
-    "url"
+final = df.select(
+    F.col('company').alias('Tên công ty'),
+    F.col('location').alias('Địa chỉ'),
+    F.col('title').alias('Vị trí tuyển dụng'),
+    "Lương (VND)",
+    "Thời gian làm việc",
+    "Hình thức làm việc",
+    F.col('Ngày đăng tuyển (dd/MM/yy)'),
+    F.col('job_description').alias('Mô tả công việc'),
+    "Phúc lợi",
+    F.col('url').alias('Đường dẫn')
 ).fillna({
-    "Tên công ty": "Không rõ",
-    "Vị trí tuyển dụng": "Không rõ",
-    "Thành phố": "Không rõ",
-    "work_mode": "Trực tiếp"
+    'Tên công ty': 'Không rõ',
+    'Vị trí tuyển dụng': 'Không rõ',
+    'Hình thức làm việc': 'Trực tiếp',
+    "Thời gian làm việc": "Giờ hành chính"
 })
 
-# -----------------------------------------------------------------------------
-# Write Output
-# -----------------------------------------------------------------------------
-out = "data_json"
-(
-    final.coalesce(1)
-         .write.mode("overwrite")
-         .option("encoding","utf-8")
-         .option("multiline",True)
-         .json(out)
-)
+# ==============================
+# Write Output (JSON)
+# ==============================
+print("Writing to JSON...")
+final_count = final.count()
 
-print(f"Done. Output folder: {out} | Records: {final.count()}")
+final.coalesce(1).write \
+    .mode("overwrite") \
+    .option("multiline", True) \
+    .json(output_path)
+
+print("="*50)
+print("PROCESSING COMPLETE! (JSON Export)")
+print("="*50)
+print("Total records:", final_count)
+print("Output folder:", output_path)
+print("="*50)
+
+# Preview results
+print("\nSample data (first 5 rows):")
+final.show(5, truncate=False)
+
 spark.stop()
+print("Spark session stopped.")
