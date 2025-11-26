@@ -1,6 +1,9 @@
 # Ý tưởng
 Trong phần join thì có ý tưởng là matching bảng job với bảng Resume để tìm tương đồng kĩ năng, kinh nghiệm - yêu cầu, địa lý
 
+# Các vấn đề đã giải quyết
+1. Giải quyết sự nghèo nàn về data, không có data để join: Đã tìm thêm các bảng liên quan từ huggingface
+
 # PySpark
 
  - PySpark DataFrame and SQL
