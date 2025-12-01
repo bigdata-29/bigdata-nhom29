@@ -3,7 +3,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-
+from selenium.webdriver.support import expected_conditions as EC
+import pickle
 from webdriver_manager.chrome import ChromeDriverManager 
 
 import time
@@ -11,6 +12,11 @@ import os
 import random
 from bs4 import BeautifulSoup
 import re
+from datetime import datetime, timedelta
+from typing import Optional
+
+
+
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 BATCH_SIZE = 25
@@ -41,22 +47,94 @@ def setup_driver():
     return driver
 
 
+# load và save cookie
+def save_cookies(driver, path):
+    """Lưu cookies của session hiện tại vào file"""
+    if not os.path.exists('cookies'):
+        os.makedirs('cookies')
+    with open(path, 'wb') as f:
+        pickle.dump(driver.get_cookies(), f)
+    print(f"Đã lưu cookies vào {path}")
+
+def load_cookies(driver, path):
+    """Load cookies từ file vào driver"""
+    if not os.path.exists(path):
+        print(f"Không tìm thấy file cookies: {path}")
+        return False
+    
+    with open(path, 'rb') as f:
+        cookies = pickle.load(f)
+        for cookie in cookies:
+            # Giả sử 'cookie' là một dictionary chứa thông tin cookie
+            # if 'domain' in cookie:
+            #     del cookie['domain']
+            # if 'expiry' in cookie: # Khóa 'expiry' cũng thường gây lỗi
+            #     del cookie['expiry']
+            driver.add_cookie(cookie)
+    print(f"Đã load cookies từ {path}")
+    return True
+
+def is_logged_in(driver):
+    """Kiểm tra xem đã đăng nhập chưa"""
+    try:
+        # Đợi tối đa 3 giây để tìm element chỉ xuất hiện khi đã đăng nhập
+        # Ví dụ: link "Sign Out" hoặc tên user
+        driver.get("https://itviec.com")
+        WebDriverWait(driver, 3).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "sign-in-user-avatar"))
+        )
+        return True
+    except Exception:
+        return False
+
 def sign_in(driver, email, password):
+    """
+    Đăng nhập vào ITviec và lưu cookies để duy trì session
+    Returns:
+        bool: True nếu đăng nhập thành công, False nếu thất bại
+    """
+    cookies_path = os.path.join('cookies', 'itviec_cookies.pkl')
+    
+    # Thử load cookies trước
+    if os.path.exists(cookies_path):
+        driver.get("https://itviec.com")
+        load_cookies(driver, cookies_path)
+        driver.refresh()  # Refresh để áp dụng cookies
+        
+        if is_logged_in(driver):
+            print("Đã đăng nhập thành công bằng cookies!")
+            return True
+        else:
+            print("Cookie không có tác dụng gì")
+    
+    # Nếu không có cookies hoặc cookies hết hạn, đăng nhập bình thường
+    print("Tiến hành đăng nhập...")
     driver.get("https://itviec.com/sign_in")
-
     time.sleep(2)
 
-    email_input = driver.find_element(By.NAME, "user[email]")
-    password_input = driver.find_element(By.NAME, "user[password]")
+    try:
+        email_input = driver.find_element(By.NAME, "user[email]")
+        password_input = driver.find_element(By.NAME, "user[password]")
 
-    email_input.send_keys(email)
-    password_input.send_keys(password)
+        email_input.send_keys(email)
+        password_input.send_keys(password)
 
-    submit_button = driver.find_element(By.XPATH, "//button[@type='submit']")
-    submit_button.click()
+        submit_button = driver.find_element(By.XPATH, "//button[@class='ibtn ibtn-md ibtn-primary w-100']")
+        submit_button.click()
 
-    time.sleep(2)
-    print("Đăng nhập thành công!")
+        # Đợi cho đến khi đăng nhập thành công (tối đa 10 giây)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "sign-in-user-avatar"))
+        )
+        
+        # Lưu cookies sau khi đăng nhập thành công
+        save_cookies(driver, cookies_path)
+        print("Đăng nhập thành công!")
+        return True
+
+    except Exception as e:
+        print(f"Lỗi khi đăng nhập: {str(e)}")
+        return False
     
 def crawl_links(driver):
     driver.get("https://itviec.com/it-jobs")
@@ -94,7 +172,69 @@ def crawl_links(driver):
             break
         
     return links
+
+
+
+
+
+
+def process_date_and_time_ago(html_content: str, time_ago_str: str) -> Optional[str]:
+    """
+    Trích xuất ngày 'Last updated' và tính toán ngày chuẩn dựa trên chuỗi 'X time ago'.
+    Chỉ cần trả về ngày chuẩn (YYYY-MM-DD).
+    """
     
+    # 1. Trích xuất ngày 'Last updated' từ comment HTML
+    # Regex tìm kiếm comment chứa ngày tháng
+    date_comment_pattern = re.compile(r'Last updated:\s*(\W[\d]{4}-[\d]{2}-[\d]{2} [\d]{2}:[\d]{2}:[\d]{2})')
+    
+    # Tìm kiếm comment trong toàn bộ nội dung HTML
+    match = date_comment_pattern.search(html_content)
+    
+    if not match:
+        return None # Không tìm thấy ngày base
+        
+    base_date_str = match.group(1)
+    base_date_str = base_date_str[1:] # loại bỏ dấu " ở đầu
+    
+    try:
+        # Chuyển đổi ngày base thành đối tượng datetime
+        base_datetime = datetime.strptime(base_date_str, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None # Lỗi định dạng ngày base
+
+    # 2. Xử lý chuỗi 'X time ago'
+    time_ago_str = time_ago_str.lower().strip()
+    
+    # Regex để trích xuất số và đơn vị (minute/hour/day)
+    # Ví dụ: "post 1 day ago" -> (1, 'day')
+    time_pattern = re.compile(r'(\d+)\s+(minute|hour|day)s?\s+ago')
+    
+    time_match = time_pattern.search(time_ago_str)
+    
+    if not time_match:
+        # Nếu không khớp, giả định bài đăng quá cũ hoặc định dạng khác, trả về ngày base
+        return base_datetime.date().strftime('%d-%m-%Y')
+        
+    amount = int(time_match.group(1))
+    unit = time_match.group(2)
+    
+    # 3. Tính toán ngày chuẩn
+    
+    # Sử dụng timedelta để trừ thời gian
+    if unit == 'minute':
+        final_datetime = base_datetime - timedelta(minutes=amount)
+    elif unit == 'hour':
+        final_datetime = base_datetime - timedelta(hours=amount)
+    elif unit == 'day':
+        final_datetime = base_datetime - timedelta(days=amount)
+    else:
+        # Trường hợp không xử lý được unit, trả về ngày base
+        return base_datetime.date().strftime('%d-%m-%Y')
+        
+    # Trả về ngày chuẩn dưới định dạng YYYY-MM-DD
+    return final_datetime.date().strftime('%d-%m-%Y')
+
 def parse_detail_job(driver, link):
     driver.get(link)
     time.sleep(random.uniform(3, 5))
@@ -110,8 +250,11 @@ def parse_detail_job(driver, link):
     job_show_info = soup.find('div', class_='job-show-info').find_all('span')
     job_show_info_list = [info.get_text().replace('\n',' ') for info in job_show_info]
     company_location  = job_show_info_list[0]
-    woring_model = job_show_info_list[1]
-    post_time = job_show_info_list[2]
+    woring_model = job_show_info_list[-2]
+    post_time = job_show_info_list[-1]
+    
+    post_time=process_date_and_time_ago(content, post_time) 
+    
     #skill and job_expertise
     skills, job_expertise = soup.find('div', class_='job-show-info').find_all('div', class_='imb-4 imb-xl-3 d-flex flex-column flex-xl-row igap-3 align-items-xl-baseline')
     skills_list = [skill.get_text(strip=True) for skill in skills.find_all('a')]
