@@ -1,3 +1,4 @@
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -36,13 +37,24 @@ def setup_driver():
 def extract_job_details(html_content, job_url):
     soup = BeautifulSoup(html_content, "html.parser")
     job_details = {
-        "url": job_url, "ten_cong_ty": "N/A", "tieu_de": "N/A", "ngay_dang_tuyen": "N/A",
-        "luong": "N/A", "kinh_nghiem": "N/A", "cap_bac": "N/A", "nganh_nghe": [],
-        "phuc_loi": [], "mo_ta_cong_viec": "", "yeu_cau_cong_viec": "",
-        "dia_diem_lam_viec": {}, "thong_tin_khac": {}
+        "url": job_url,
+        "ten_cong_ty": "N/A",
+        "tieu_de": "N/A",
+        "ngay_dang_tuyen": "N/A",
+        "luong": "N/A",
+        "kinh_nghiem": "N/A",  # Trang này không có trường kinh nghiệm riêng
+        "cap_bac": "N/A",
+        "nganh_nghe": [],
+        "phuc_loi": [],
+        "mo_ta_cong_viec": "",
+        "yeu_cau_cong_viec": "",
+        "dia_diem_lam_viec": {},
+        "thong_tin_khac": {}
     }
 
-    # 1. Trích xuất Tiêu đề và Tên công ty
+    # 1. Trích xuất Tiêu đề và Tên công ty (trong header)
+    # Phần này đã tốt, nhưng có thể trang không có header.
+    # Ta sẽ tìm lại ở phần khác nếu không thấy.
     job_header = soup.find("div", class_="job-desc")
     if job_header:
         title_tag = job_header.find("h1", class_="title")
@@ -51,76 +63,82 @@ def extract_job_details(html_content, job_url):
         company_tag = job_header.find("a", class_="job-company-name")
         if company_tag: job_details["ten_cong_ty"] = company_tag.get_text(strip=True)
 
-    # 2. Trích xuất các thông tin chung (Lương, Kinh nghiệm, Ngày cập nhật, v.v.)
-    all_list_items = soup.find_all("li")
-    for item in all_list_items:
-        label_tag = item.find("strong")
-        value_tag = item.find("p")
+    # 2. Trích xuất các thông tin chính từ box màu xanh (chính xác và hiệu quả hơn)
+    blue_box = soup.find("div", class_="bg-blue")
+    if blue_box:
+        location_tag = blue_box.select_one("strong:-soup-contains('Địa điểm') + p a")
+        if location_tag:
+            job_details["dia_diem_lam_viec"]["thanh_pho"] = location_tag.get_text(strip=True)
 
-        if label_tag and value_tag:
-            label = label_tag.get_text(strip=True)
-            value = value_tag.get_text(strip=True)
+        update_date_tag = blue_box.select_one("strong:-soup-contains('Ngày cập nhật') + p")
+        if update_date_tag:
+            job_details["ngay_dang_tuyen"] = update_date_tag.get_text(strip=True)
 
-            if "Ngày cập nhật" in label:
-                job_details["ngay_dang_tuyen"] = value
-            elif "Lương" in label:
-                # Gán lương vào thong_tin_khac để PySpark xử lý tập trung
-                job_details["thong_tin_khac"]["lương"] = item.find("p").get_text(separator=" ", strip=True)
-            elif "Kinh nghiệm" in label:
-                job_details["kinh_nghiem"] = value.replace("\n", " ").strip()
-            elif "Cấp bậc" in label:
-                job_details["cap_bac"] = value
-            elif "Ngành nghề" in label:
-                industry_tags = value_tag.find_all("a")
-                if industry_tags:
-                    job_details["nganh_nghe"] = [tag.get_text(strip=True) for tag in industry_tags]
+        industry_tags = blue_box.select("strong:-soup-contains('Ngành nghề') + p a")
+        if industry_tags:
+            job_details["nganh_nghe"] = [tag.get_text(strip=True) for tag in industry_tags]
 
-    # Ghi đè lương từ box màu xanh nếu có (ưu tiên hơn)
-    blue_box_salary_tag = soup.select_one("div.bg-blue strong:-soup-contains('Lương') + p")
-    if blue_box_salary_tag:
-        job_details["luong"] = blue_box_salary_tag.get_text(strip=True)
+        salary_tag = blue_box.select_one("strong:-soup-contains('Lương') + p")
+        if salary_tag:
+            job_details["luong"] = salary_tag.get_text(strip=True)
 
-    # 3. Trích xuất Mô tả, Yêu cầu, Địa điểm
-    detail_rows = soup.find_all("div", class_="detail-row")
-    for row in detail_rows:
-        title_tag = row.find(["h2", "h3"], class_="detail-title")
-        if title_tag:
-            title_text = title_tag.get_text(strip=True)
-            # Tìm thẻ div nội dung ngay sau thẻ tiêu đề
-            content_div = title_tag.find_next_sibling("div")
+        level_tag = blue_box.select_one("strong:-soup-contains('Cấp bậc') + p")
+        if level_tag:
+            job_details["cap_bac"] = level_tag.get_text(strip=True)
 
-            if content_div:
-                if "Mô tả Công việc" in title_text:
-                    job_details["mo_ta_cong_viec"] = content_div.get_text(separator="\n", strip=True)
-                elif "Yêu Cầu Công Việc" in title_text:
-                    job_details["yeu_cau_cong_viec"] = content_div.get_text(separator="\n", strip=True)
-                elif "Địa điểm làm việc" in title_text:
-                    city_tag = content_div.find("div", class_="place")
-                    address_tag = content_div.find("span")
-                    if city_tag: job_details["dia_diem_lam_viec"]["thanh_pho"] = city_tag.get_text(strip=True)
-                    if address_tag: job_details["dia_diem_lam_viec"]["dia_chi_day_du"] = address_tag.get_text(
-                        strip=True)
-                elif "Thông tin khác" in title_text:
-                    ul_tag = content_div.find("ul")
-                    if ul_tag:
-                        list_items = ul_tag.find_all("li")
-                        for li_item in list_items:
-                            parts = li_item.get_text(separator=":", strip=True).split(":", 1)
-                            if len(parts) == 2:
-                                key = parts[0].strip().replace(" ", "_").lower()
-                                value = parts[1].strip()
-                                job_details["thong_tin_khac"][key] = value
+    # =============================================================================
+    # PHẦN SỬA LỖI CHÍNH: CRAWL MÔ TẢ VÀ YÊU CẦU CÔNG VIỆC
+    # =============================================================================
 
-    # 4. Trích xuất Phúc lợi
-    welfare_section = soup.find("h2", class_="detail-title", string=lambda text: text and "Phúc lợi" in text)
+    # Tìm thẻ h2 chứa "Mô tả Công việc"
+    # re.compile giúp tìm kiếm linh hoạt, không phân biệt hoa thường
+    description_title = soup.find('h2', class_='detail-title', string=re.compile(r"Mô tả Công việc", re.IGNORECASE))
+    if description_title:
+        # Từ tiêu đề, tìm thẻ cha bao bọc nó
+        parent_div = description_title.find_parent('div', class_='detail-row')
+        if parent_div:
+            # Lấy tất cả các thẻ <p> là "em" của tiêu đề
+            content_tags = description_title.find_next_siblings('p')
+            job_details["mo_ta_cong_viec"] = '\n'.join(p.get_text(separator='\n', strip=True) for p in content_tags)
+
+    # Tương tự cho "Yêu Cầu Công Việc"
+    requirement_title = soup.find('h2', class_='detail-title', string=re.compile(r"Yêu Cầu Công Việc", re.IGNORECASE))
+    if requirement_title:
+        parent_div = requirement_title.find_parent('div', class_='detail-row')
+        if parent_div:
+            content_tags = requirement_title.find_next_siblings('p')
+            job_details["yeu_cau_cong_viec"] = '\n'.join(p.get_text(separator='\n', strip=True) for p in content_tags)
+
+    # =============================================================================
+
+    # 4. Trích xuất Phúc lợi (đã tốt)
+    welfare_section = soup.find("h2", class_="detail-title", string=re.compile(r"Phúc lợi", re.IGNORECASE))
     if welfare_section:
         welfare_list_ul = welfare_section.find_next_sibling("ul", class_="welfare-list")
         if welfare_list_ul:
             welfare_items = welfare_list_ul.find_all("li")
             job_details["phuc_loi"] = [li.get_text(strip=True) for li in welfare_items]
 
-    return job_details
+    # 5. Trích xuất Địa chỉ chi tiết và Thông tin khác (chính xác hơn)
+    address_detail_section = soup.find("div", class_="info-place-detail")
+    if address_detail_section:
+        address_span = address_detail_section.find("span")
+        if address_span:
+            job_details["dia_diem_lam_viec"]["dia_chi_day_du"] = address_span.get_text(strip=True).strip()
 
+    other_info_section = soup.find("h3", class_="detail-title", string=re.compile(r"Thông tin khác", re.IGNORECASE))
+    if other_info_section:
+        content_div = other_info_section.find_next_sibling("div", class_="content_fck")
+        if content_div:
+            list_items = content_div.find_all("li")
+            for li_item in list_items:
+                parts = [part.strip() for part in li_item.get_text(strip=True).split(':', 1)]
+                if len(parts) == 2:
+                    key = parts[0].lower().replace(" ", "_")
+                    value = parts[1].strip()
+                    job_details["thong_tin_khac"][key] = value
+
+    return job_details
 
 def get_all_job_urls(base_url_template):
     print("--- GIAI ĐOẠN 1: Bắt đầu thu thập tất cả URL công việc ---")

@@ -275,7 +275,7 @@ df_cleaned = df_cleaned.drop("cap_bac_udf", "cap_bac_builtin")
 
 # Lưu dạng JSON (luôn work trên Windows)
 try:
-    output_path = "cleaned_recruitment_data.json"
+    output_path = "../cleaned_recruitment_data.json"
     df_cleaned.write.mode("overwrite").json(output_path)
     print(f"✓ Đã lưu dữ liệu JSON vào: {output_path}")
 except Exception as e:
@@ -283,7 +283,7 @@ except Exception as e:
 
 # Thử lưu Parquet (có thể lỗi trên Windows)
 try:
-    output_path_parquet = "cleaned_recruitment_data.parquet"
+    output_path_parquet = "../cleaned_recruitment_data.parquet"
     df_cleaned.coalesce(1).write.mode("overwrite") \
         .option("compression", "none") \
         .parquet(output_path_parquet)

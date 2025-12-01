@@ -52,7 +52,7 @@ def parse_salary_expr(col):
 def main():
     spark = setup_spark_session()
 
-    input_path = "../careerviet_jobs.jsonl"
+    input_path = "../../careerviet_jobs.jsonl"
     try:
         raw_df = spark.read.option("mergeSchema", "true").json(input_path)
     except Exception as e:
@@ -122,7 +122,7 @@ def main():
     )
 
     print("Hoàn tất xử lý. Đang ghi dữ liệu vào preprocessed_data.jsonl ...")
-    output_file = "preprocessed_data.jsonl"
+    output_file = "../preprocessed_data.jsonl"
     try:
         rows_to_write = final_df.collect()
 
