@@ -1,0 +1,11 @@
+sudo nano /usr/local/hadoop/etc/hadoop/hdfs-site.xml
+
+Images:
+docker build -t hoanvdtd/airflow-selenium:latest .
+docker push hoanvdtd/airflow-selenium:latest
+helm upgrade airflow apache-airflow/airflow -f airflow-values.yaml -n airflow
+
+Airflow check:
+kubectl get pods -n airflow
+
+
