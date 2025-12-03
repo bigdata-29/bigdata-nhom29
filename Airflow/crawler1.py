@@ -1,3 +1,4 @@
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -243,13 +244,16 @@ def main():
             job_data = extract_job_details(job_detail_html, job_url)
 
             if job_data:
-                with open(output_filename, 'a', encoding='utf-8') as f:
+                with open(local_output, 'a', encoding='utf-8') as f:
                     f.write(json.dumps(job_data, ensure_ascii=False) + '\n')
                 crawled_count += 1
                 print(
                     f"    -> Đã lưu thành công: {job_data.get('ten_cong_ty', 'N/A')} - {job_data.get('tieu_de', 'N/A')}")
 
             time.sleep(2)
+        except Exception as e:
+            print(f"    -> Lỗi khi xử lý {job_url}: {type(e).__name__} - {e}. Bỏ qua.")
+            continue
 
     if driver:
         driver.quit()
