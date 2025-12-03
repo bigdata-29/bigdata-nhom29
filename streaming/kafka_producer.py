@@ -13,7 +13,7 @@ class JobProducer:
         # Lấy thông tin cấu hình từ biến môi trường
         #self.bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
         #self.topic = os.getenv('KAFKA_TOPIC', 'it-jobs')
-        self.bootstrap_servers= '127.0.0.1:62831'
+        self.bootstrap_servers= '127.0.0.1:53202'
         self.topic= 'it-jobs'
         self.producer = self._create_producer()
 

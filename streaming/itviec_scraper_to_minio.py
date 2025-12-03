@@ -9,7 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 
 from webdriver_manager.chrome import ChromeDriverManager 
-from kafka_producer import JobProducer
+from minio_writer import MinioWriter
 
 import datetime
 import time
@@ -170,56 +170,7 @@ def parse_detail_job(driver, link):
         
     }
     
-def run_crawl(email='dihidromonooxit01012000@gmail.com', password='1!Aaaaaaaaaa'):
-    """
-    Chạy crawler, cào dữ liệu và gửi từng job vào Kafka ngay lập tức.
-    """
-    # 1. Khởi tạo Producer ở đầu
-    producer = JobProducer()
-    if not producer.producer: # Nếu không kết nối được Kafka thì dừng luôn
-        return
 
-    driver = setup_driver()
-    job_sent_count = 0
-
-    # 2. Dùng try...finally để đảm bảo producer luôn được đóng
-    try:
-        try:
-            sign_in(driver, email, password)
-        except Exception as e:
-            print(f'Warning: không thể đăng nhập hoặc bỏ qua đăng nhập: {e}')
-
-        links = crawl_links(driver)
-        print(f'Đã thu thập được {len(links)} links. Bắt đầu cào chi tiết...')
-
-        for i, link in enumerate(links):
-            try:
-                # Cào chi tiết một job
-                detail = parse_detail_job(driver, link)
-
-                # 3. THÊM CÁC TRƯỜNG DỮ LIỆU QUAN TRỌNG
-                # Thêm nguồn dữ liệu để Spark biết tin này từ đâu
-                detail['source'] = 'itviec.com'
-                # Thêm timestamp thời điểm cào dữ liệu
-                detail['crawled_at'] = datetime.datetime.now().isoformat()
-                detail['url'] = link # Thêm cả URL của tin tuyển dụng
-
-                # 4. GỬI DỮ LIỆU VÀO KAFKA
-                producer.send_job(detail)
-                job_sent_count += 1
-                print(f"[{i+1}/{len(links)}] Đã gửi job '{detail['job_title']}' từ {detail['company_name']} vào Kafka.")
-
-            except Exception as e:
-                print(f'Lỗi khi parse {link} (link thứ {i+1}): {e}. Bỏ qua.')
-                continue
-
-    finally:
-        # 5. Luôn đóng driver và producer khi kết thúc
-        print("\nHoàn tất quá trình cào dữ liệu.")
-        print(f"Tổng số tin tuyển dụng đã gửi vào Kafka: {job_sent_count}")
-        if driver:
-            driver.quit()
-        producer.close()
 
 # def crawl_first_page_links(driver):
 #     """Một phiên bản sửa đổi của crawl_links, chỉ lấy link ở trang đầu tiên."""
@@ -323,69 +274,64 @@ def crawl_first_page_links(driver):
             time.sleep(interval_seconds)
 
     except KeyboardInterrupt:
-        print("\n\n🛑 Đã nhận tín hiệu ngắt (Ctrl+C). Đang dừng streaming...")
+        print("\n\n Đã nhận tín hiệu ngắt (Ctrl+C). Đang dừng streaming...")
     finally:
         print("\nĐang dọn dẹp và thoát...")
         if driver: driver.quit()
         if producer: producer.close()
+
 def run_continuous_crawl(interval_seconds=60, email='dihidromonooxit01012000@gmail.com', password='1!Aaaaaaaaaa'):
     """
-    Chạy crawler ở chế độ streaming liên tục, tái tạo kết nối Kafka mỗi chu kỳ.
+    Chạy crawler, cào dữ liệu và LƯU VÀO MINIO ở lớp Bronze.
     """
     driver = None
-    total_jobs_sent = 0
+    total_jobs_saved = 0
 
     try:
         driver = setup_driver()
-        sign_in(driver, email, password)
+        # Đăng nhập chỉ một lần ở đầu
+        # sign_in(driver, "email", "password")
 
         while True:
             print(f"\n{'='*50}")
-            print(f"Bắt đầu chu kỳ cào dữ liệu mới lúc: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Bắt đầu chu kỳ cào dữ liệu lúc: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-            # 1. TẠO PRODUCER MỚI Ở ĐẦU MỖI CHU KỲ
-            producer = JobProducer()
-            if not producer.producer:
-                print("Không thể tạo producer, sẽ thử lại ở chu kỳ sau.")
+            # Tạo writer mới ở mỗi chu kỳ để đảm bảo kết nối tốt
+            writer = MinioWriter()
+            if not writer.client:
+                print("Không thể kết nối MinIO, sẽ thử lại ở chu kỳ sau.")
                 time.sleep(interval_seconds)
-                continue # Bỏ qua chu kỳ này và thử lại
+                continue
 
+            links = crawl_first_page_links(driver)
             session_job_count = 0
-            try:
-                links = crawl_first_page_links(driver)
-                for i, link in enumerate(links):
-                    try:
-                        #todo: Thêm logic để kiểm tra xem link này đã được cào trước đó chưa (dùng DB/cache)
-                        # Nếu đã cào rồi thì `continue`
-                        detail = parse_detail_job(driver, link)
-                        detail['source'] = 'itviec.com'
-                        detail['crawled_at'] = datetime.datetime.now().isoformat()
-                        detail['url'] = link
-                        
-                        producer.send_job(detail)
-                        session_job_count += 1
-                    except Exception as e:
-                        print(f"Lỗi khi xử lý link {link}: {e}")
-            
-            finally:
-                # 2. ĐÓNG PRODUCER Ở CUỐI MỖI CHU KỲ
-                print(f"Chu kỳ hoàn tất. Đã gửi {session_job_count} tin mới.")
-                if producer:
-                    producer.close()
+            for i, link in enumerate(links):
+                try:
+                    detail = parse_detail_job(driver, link)
+                    detail['source'] = 'itviec.com'
+                    detail['crawled_at'] = datetime.datetime.now().isoformat()
+                    detail['url'] = link
 
-            total_jobs_sent += session_job_count
-            print(f"Tổng cộng đã gửi: {total_jobs_sent}")
+                    # Lưu job vào MinIO
+                    if writer.save_job_to_bronze(detail):
+                        session_job_count += 1
+                        print(f"[{i+1}/{len(links)}] Đã lưu job '{detail['job_title']}' vào MinIO.")
+
+                except Exception as e:
+                    print(f"Lỗi khi xử lý link {link}: {e}")
+
+            total_jobs_saved += session_job_count
+            print(f"Chu kỳ hoàn tất. Đã lưu {session_job_count} tin mới. Tổng cộng đã lưu: {total_jobs_saved}")
             print(f"Sẽ nghỉ trong {interval_seconds / 60:.1f} phút...")
             print(f"{'='*50}\n")
             time.sleep(interval_seconds)
 
     except KeyboardInterrupt:
-        print("\n\nĐã nhận tín hiệu ngắt (Ctrl+C). Đang dừng streaming...")
+        print("\n\n Đã nhận tín hiệu ngắt (Ctrl+C). Đang dừng streaming...")
     finally:
         print("\nĐang dọn dẹp và thoát...")
         if driver:
             driver.quit()
-        # Không cần đóng producer ở đây nữa vì nó đã được đóng trong vòng lặp
 if __name__ == '__main__':
     #run_crawl()
     run_continuous_crawl()
