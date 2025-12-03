@@ -122,7 +122,7 @@ def main():
     )
 
     print("Hoàn tất xử lý. Đang ghi dữ liệu vào preprocessed_data.jsonl ...")
-    output_file = "../preprocessed_data.jsonl"
+    output_file = "preprocessed_data.jsonl"
     try:
         rows_to_write = final_df.collect()
 
