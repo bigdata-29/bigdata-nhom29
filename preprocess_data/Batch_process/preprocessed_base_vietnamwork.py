@@ -3,6 +3,7 @@
 # ===================================
 
 import os
+from pyspark import SparkConf
 from pyspark.sql import SparkSession, functions as F, types as T
 import re
 from pyspark.sql.functions import sha2, concat_ws, col
@@ -17,16 +18,28 @@ os.environ["PYSPARK_DRIVER_PYTHON"] = r"C:\Program Files\Python311\venv_spark311
 os.environ["JAVA_HOME"] = r"C:\Program Files\RedHat\java-17-openjdk-17.0.10.0.7-2.jre"
 
 print("Starting Spark session...")
-spark = (
-    SparkSession.builder
-    .appName("BatchProcessing")
-    .config("spark.hadoop.io.nativeio.disable", "true")
-    .config("spark.hadoop.fs.checksum.file", "false")
-    .config("spark.driver.memory", "4g")
-    .config("spark.executor.memory", "4g")
+# spark = (
+#     SparkSession.builder
+#     .appName("BatchProcessing")
+#     .config("spark.hadoop.io.nativeio.disable", "true")
+#     .config("spark.hadoop.fs.checksum.file", "false")
+#     .config("spark.driver.memory", "4g")
+#     .config("spark.executor.memory", "4g")
+#     .getOrCreate()
+# )
+spark = SparkSession.builder \
+    .appName("VietnamWorkPreprocessing") \
+    .master("k8s://https://<K8S_API_SERVER>") \
+    .config("spark.kubernetes.container.image", "<spark-image>") \
+    .config("spark.executor.instances", 2) \
+    .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:8020") \
+    .config("spark.hadoop.dfs.client.use.datanode.hostname", "true") \
     .getOrCreate()
-)
 
+
+spark = SparkSession.builder.config(conf=conf).getOrCreate()
+
+print("Spark UI: http://localhost:4040")
 print(f"Spark UI: http://localhost:4040\n")
 
 # ==============================
@@ -362,6 +375,54 @@ print("\n✅ Processing complete! Check the files above.")
 
 
 
+# # 3. Save Parquet partitioned by dia_chi and ngay_dang_tuyen
+# print("\nSaving Parquet (partitioned)...")
+
+# # Normalize partition columns
+# final_save = final \
+#     .withColumn("dia_chi_partition", F.regexp_replace(F.col("Địa chỉ"), r"[^a-zA-Z0-9\s\.-]", "")) \
+#     .withColumn(
+#         "ngay_partition",
+#         F.to_date(F.col("Ngày đăng tuyển (dd/MM/yy)"), "dd/MM/yy")
+#     )
+
+# # parquet_output_path = "hdfs://localhost:8020/processed_jobs"   # hoặc "s3a://bucket/processed_jobs" khi dùng MinIO
+
+# print(spark.sparkContext._conf.get("spark.hadoop.fs.defaultFS"))
+
+# output_path = "hdfs://localhost:9000/processed_jobs"
 
 
+# final_save.write \
+#     .mode("overwrite") \
+#     .partitionBy("dia_chi_partition", "ngay_partition") \
+#     .parquet(output_path)
+
+# print("✓ Parquet saved to HDFS:", output_path)
+
+
+# print(f"✓ Partitioned Parquet saved to: {parquet_output_path}")
+
+
+
+# # 3. Save Parquet partitioned by dia_chi and ngay_dang_tuyen vào folder project
+# print("\nSaving Parquet (partitioned)...")
+
+# # Normalize partition columns
+# final_save = final \
+#     .withColumn("dia_chi_partition", F.regexp_replace(F.col("Địa chỉ"), r"[^a-zA-Z0-9\s\.-]", "")) \
+#     .withColumn(
+#         "ngay_partition",
+#         F.to_date(F.col("Ngày đăng tuyển (dd/MM/yy)"), "dd/MM/yy")
+#     )
+
+# parquet_output_path = "hdfs://localhost:8020/processed_jobs"   # hoặc "s3a://bucket/processed_jobs" khi dùng MinIO
+
+# final_save.write \
+#     .mode("overwrite") \
+#     .partitionBy("dia_chi_partition", "ngay_partition") 
+# df.write.mode("overwrite").parquet(r"D:\20251\bigdata-nhom29\preprocess_data\output_parquet")
+
+
+# print(f"✓ Partitioned Parquet saved to: {parquet_output_path}")
 
