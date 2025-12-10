@@ -37,7 +37,7 @@ spark = (
 #     .getOrCreate()
 
 
-spark = SparkSession.builder.config(conf=conf).getOrCreate()
+# spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
 print("Spark UI: http://localhost:4040")
 print(f"Spark UI: http://localhost:4040\n")

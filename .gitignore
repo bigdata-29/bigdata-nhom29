@@ -1,0 +1,13 @@
+# --- Python & Virtual Environment ---
+__pycache__/
+*.py[cod]
+*$py.class
+# Môi trường ảo (sửa tên nếu bạn đặt khác)
+venv/
+env/
+venv_spark311/
+.env
+
+docker-compose.yml
+
+preprocess_data/Batch_process/vietnamworks_jobs_20251028_144306.json
