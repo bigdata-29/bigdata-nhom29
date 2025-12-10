@@ -1,0 +1,7 @@
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <!-- Trỏ về máy thật thông qua DNS của Minikube -->
+    <value>hdfs://host.minikube.internal:9000</value>
+  </property>
+</configuration>
