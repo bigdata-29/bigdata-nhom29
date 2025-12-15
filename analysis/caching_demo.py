@@ -254,7 +254,9 @@ print("="*60)
 
 
 # Đường dẫn file 
-input_file = "../preprocess_data/cleaned_recruitment_data.json" 
+# input_file = "../preprocess_data/cleaned_recruitment_data.json" 
+input_file = "../preprocess_data/cleaned_recruitment_data.parquet" 
+
 _temp_parquet = "tmp_final_materialized_parquet"
 
 
@@ -268,7 +270,9 @@ _temp_parquet = "tmp_final_materialized_parquet"
 print(f"\n[1] Reading JSON from: {input_file}")
 
 try:
-    df = spark.read.json(input_file)
+    # df = spark.read.json(input_file)
+    df = spark.read.parquet(input_file)
+
 except Exception as e:
     print(f"Lỗi đọc file JSON: {e}")
     exit(1)
