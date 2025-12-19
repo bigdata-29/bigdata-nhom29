@@ -24,3 +24,8 @@ WTF_CSRF_ENABLED = False
 
 # Set this API key to enable Mapbox visualizations
 MAPBOX_API_KEY = ''
+
+FEATURE_FLAGS = {
+    "ALLOW_ADHOC_SUBQUERY": True
+}
+
