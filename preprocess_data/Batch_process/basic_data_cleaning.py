@@ -71,6 +71,7 @@ print(f"Số bản ghi sau khi lọc các trường quan trọng (trừ lương)
 # ============================================
 df = df.withColumn(
     "Địa chỉ",
+    # --- Các thành phố lớn & quy tắc riêng của bạn ---
     when(lower(col("Địa chỉ")).contains("hồ chí minh"), "TP.HCM")
     .when(lower(col("Địa chỉ")).contains("hà nội"), "Hà Nội")
     .when(lower(col("Địa chỉ")).contains("đà nẵng"), "Đà Nẵng")
@@ -81,6 +82,74 @@ df = df.withColumn(
     .when(lower(col("Địa chỉ")).contains("huế"), "Thừa Thiên Huế")
     .when(lower(col("Địa chỉ")).contains("vinh"), "Nghệ An")
     .when(lower(col("Địa chỉ")).contains("buôn ma thuột"), "Đắk Lắk")
+
+    # --- Miền Bắc ---
+    .when(lower(col("Địa chỉ")).contains("bắc giang"), "Bắc Giang")
+    .when(lower(col("Địa chỉ")).contains("bắc kạn"), "Bắc Kạn")
+    .when(lower(col("Địa chỉ")).contains("bắc ninh"), "Bắc Ninh")
+    .when(lower(col("Địa chỉ")).contains("cao bằng"), "Cao Bằng")
+    .when(lower(col("Địa chỉ")).contains("điện biên"), "Điện Biên")
+    .when(lower(col("Địa chỉ")).contains("hà giang"), "Hà Giang")
+    .when(lower(col("Địa chỉ")).contains("hà nam"), "Hà Nam")
+    .when(lower(col("Địa chỉ")).contains("hải dương"), "Hải Dương")
+    .when(lower(col("Địa chỉ")).contains("hòa bình"), "Hòa Bình")
+    .when(lower(col("Địa chỉ")).contains("hưng yên"), "Hưng Yên")
+    .when(lower(col("Địa chỉ")).contains("lai châu"), "Lai Châu")
+    .when(lower(col("Địa chỉ")).contains("lạng sơn"), "Lạng Sơn")
+    .when(lower(col("Địa chỉ")).contains("lào cai"), "Lào Cai")
+    .when(lower(col("Địa chỉ")).contains("nam định"), "Nam Định")
+    .when(lower(col("Địa chỉ")).contains("ninh bình"), "Ninh Bình")
+    .when(lower(col("Địa chỉ")).contains("phú thọ"), "Phú Thọ")
+    .when(lower(col("Địa chỉ")).contains("quảng ninh"), "Quảng Ninh")
+    .when(lower(col("Địa chỉ")).contains("sơn la"), "Sơn La")
+    .when(lower(col("Địa chỉ")).contains("thái bình"), "Thái Bình")
+    .when(lower(col("Địa chỉ")).contains("thái nguyên"), "Thái Nguyên")
+    .when(lower(col("Địa chỉ")).contains("tuyên quang"), "Tuyên Quang")
+    .when(lower(col("Địa chỉ")).contains("vĩnh phúc"), "Vĩnh Phúc")
+    .when(lower(col("Địa chỉ")).contains("yên bái"), "Yên Bái")
+
+    # --- Miền Trung ---
+    .when(lower(col("Địa chỉ")).contains("bình định"), "Bình Định")
+    .when(lower(col("Địa chỉ")).contains("bình thuận"), "Bình Thuận")
+    .when(lower(col("Địa chỉ")).contains("hà tĩnh"), "Hà Tĩnh")
+    .when(lower(col("Địa chỉ")).contains("khánh hòa"),
+          "Khánh Hòa")
+    .when(lower(col("Địa chỉ")).contains("ninh thuận"), "Ninh Thuận")
+    .when(lower(col("Địa chỉ")).contains("phú yên"), "Phú Yên")
+    .when(lower(col("Địa chỉ")).contains("quảng bình"), "Quảng Bình")
+    .when(lower(col("Địa chỉ")).contains("quảng nam"), "Quảng Nam")
+    .when(lower(col("Địa chỉ")).contains("quảng ngãi"), "Quảng Ngãi")
+    .when(lower(col("Địa chỉ")).contains("quảng trị"), "Quảng Trị")
+    .when(lower(col("Địa chỉ")).contains("thanh hóa"), "Thanh Hóa")
+    .when(lower(col("Địa chỉ")).contains("huế"), "Thừa Thiên Huế")
+
+    # --- Tây Nguyên ---
+    .when(lower(col("Địa chỉ")).contains("đắk lắk"), "Đắk Lắk")
+    .when(lower(col("Địa chỉ")).contains("đắk nông"), "Đắk Nông")
+    .when(lower(col("Địa chỉ")).contains("gia lai"), "Gia Lai")
+    .when(lower(col("Địa chỉ")).contains("kon tum"), "Kon Tum")
+    .when(lower(col("Địa chỉ")).contains("lâm đồng"), "Lâm Đồng")
+
+    # --- Miền Nam ---
+    .when(lower(col("Địa chỉ")).contains("an giang"), "An Giang")
+    .when(lower(col("Địa chỉ")).contains("bà rịa"), "Bà Rịa - Vũng Tàu")
+    .when(lower(col("Địa chỉ")).contains("vũng tàu"), "Bà Rịa - Vũng Tàu")
+    .when(lower(col("Địa chỉ")).contains("bạc liêu"), "Bạc Liêu")
+    .when(lower(col("Địa chỉ")).contains("bến tre"), "Bến Tre")
+    .when(lower(col("Địa chỉ")).contains("bình dương"), "Bình Dương")
+    .when(lower(col("Địa chỉ")).contains("bình phước"), "Bình Phước")
+    .when(lower(col("Địa chỉ")).contains("cà mau"), "Cà Mau")
+    .when(lower(col("Địa chỉ")).contains("đồng nai"), "Đồng Nai")
+    .when(lower(col("Địa chỉ")).contains("đồng tháp"), "Đồng Tháp")
+    .when(lower(col("Địa chỉ")).contains("hậu giang"), "Hậu Giang")
+    .when(lower(col("Địa chỉ")).contains("kiên giang"), "Kiên Giang")
+    .when(lower(col("Địa chỉ")).contains("long an"), "Long An")
+    .when(lower(col("Địa chỉ")).contains("sóc trăng"), "Sóc Trăng")
+    .when(lower(col("Địa chỉ")).contains("tây ninh"), "Tây Ninh")
+    .when(lower(col("Địa chỉ")).contains("tiền giang"), "Tiền Giang")
+    .when(lower(col("Địa chỉ")).contains("trà vinh"), "Trà Vinh")
+    .when(lower(col("Địa chỉ")).contains("vĩnh long"), "Vĩnh Long")
+
     .otherwise("Khác")
 )
 

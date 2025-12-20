@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: selenium-crawl
+spec:
+  containers:
+    - name: container
+      image: hoanvdtd/airflow-selenium:latest
+      imagePullPolicy: IfNotPresent
+      # command sẽ bị ghi đè trong DAG
+      command: ["sleep", "3600"]
+      env:
+        - name: HADOOP_USER_NAME
+          value: hoanvdtd
+        - name: JAVA_HOME
+          value: /usr/lib/jvm/java-17-openjdk-amd64
+        - name: HADOOP_CONF_DIR
+          value: /opt/hadoop/etc/hadoop
+        - name: HDFS_HOST
+          value: hdfs://192.168.49.1:9000
+  restartPolicy: Never
+  hostNetwork: false
+  dnsPolicy: ClusterFirst
+  hostAliases:
+    - ip: 192.168.49.2
+      hostnames:
+        - host.minikube.internal

@@ -8,21 +8,12 @@ from pyspark.sql.types import StringType
 
 
 def setup_spark_session():
-    # os.environ["PYSPARK_PYTHON"] = r"D:\code language\anaconda3\envs\bigdata\python.exe"
-    # os.environ["PYSPARK_DRIVER_PYTHON"] = r"D:\code language\anaconda3\envs\bigdata\python.exe"
+    os.environ["PYSPARK_PYTHON"] = sys.executable
+    os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
-    # os.environ["PYSPARK_PYTHON"] = sys.executable
-    # os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
-    # import pyspark
-    # spark_home_path = os.path.join(os.path.dirname(pyspark.__file__), "bin", "..")
-    # os.environ["SPARK_HOME"] = os.path.abspath(spark_home_path)
-    
-    os.environ["HADOOP_HOME"] = r"D:\code language\winutils"
-    
-    os.environ["PATH"] = os.environ["PATH"] + ";" + os.path.join(os.environ["HADOOP_HOME"], "bin")
     spark = (
         SparkSession.builder
-        .appName("ITviec_preprocess")
+        .appName("ITviecProcessing_Final")
         .master("local[*]")
         .config("spark.driver.memory", "4g")
         .config("spark.driver.bindAddress", "127.0.0.1")
@@ -30,12 +21,6 @@ def setup_spark_session():
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("ERROR")
-    
-    # spark = SparkSession.builder \
-    #     .appName("ITviec_preprocess") \
-    #     .getOrCreate()
-    # spark.sparkContext.setLogLevel("ERROR")
-
     return spark
 
 # chuẩn hóa địa chỉ công ty
