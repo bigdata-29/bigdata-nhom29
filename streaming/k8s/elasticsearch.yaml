@@ -1,0 +1,23 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elasticsearch
+  namespace: datastore
+spec:
+  version: 8.5.1
+  nodeSets:
+  - name: default
+    count: 1 # Chỉ cần 1 node cho môi trường dev
+    config:
+      # TẮT BẢO MẬT ĐỂ DỄ DÀNG KẾT NỐI TRONG MÔI TRƯỜNG DEV
+      # CẢNH BÁO: KHÔNG BAO GIỜ LÀM ĐIỀU NÀY TRONG MÔI TRƯỜNG PRODUCTION
+      xpack.security.enabled: false
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
