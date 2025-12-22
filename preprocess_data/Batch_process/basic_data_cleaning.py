@@ -7,7 +7,8 @@ from pyspark.sql.functions import (
     trim, lower, split, coalesce, element_at, size, udf
 )
 from pyspark.sql.types import LongType, StringType
-
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number, lower, trim, regexp_replace
 
 def setup_spark_session():
     """
@@ -64,7 +65,46 @@ df = df.filter(
     col("Vị trí công việc").isNotNull() &
     col("Ngày đăng tuyển").isNotNull()
 )
-print(f"Số bản ghi sau khi lọc các trường quan trọng (trừ lương): {df.count()}")
+
+print("\n=== XỬ LÝ TIN TRÙNG (Batch Deduplication – Improved) ===")
+before_dedup = df.count()
+
+# Chuẩn hóa các cột dùng để dedup (KHÔNG ảnh hưởng dữ liệu gốc)
+df = (
+    df
+    .withColumn(
+        "company_norm",
+        lower(trim(regexp_replace(col("Tên công ty"), r"\s+", " ")))
+    )
+    .withColumn(
+        "title_norm",
+        lower(trim(regexp_replace(col("Vị trí công việc"), r"\s+", " ")))
+    )
+    .withColumn(
+        "address_norm",
+        lower(trim(regexp_replace(col("Địa chỉ"), r"\s+", " ")))
+    )
+)
+
+# Window dedup: cùng công ty + vị trí + địa chỉ → giữ tin mới nhất
+window_spec = Window.partitionBy(
+    "company_norm",
+    "title_norm",
+    "address_norm"
+).orderBy(col("Ngày đăng tuyển").desc())
+
+df = (
+    df
+    .withColumn("row_num", row_number().over(window_spec))
+    .filter(col("row_num") == 1)
+    .drop("row_num", "company_norm", "title_norm", "address_norm")
+)
+
+after_dedup = df.count()
+
+print(f"Trước dedup: {before_dedup}")
+print(f"Sau dedup:   {after_dedup}")
+print(f"Đã loại bỏ:  {before_dedup - after_dedup} tin trùng")
 
 # ============================================
 # BƯỚC 2: CHUẨN HÓA CỘT ĐỊA CHỈ
