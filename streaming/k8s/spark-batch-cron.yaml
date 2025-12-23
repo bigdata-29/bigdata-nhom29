@@ -1,0 +1,33 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: ScheduledSparkApplication
+metadata:
+  name: it-jobs-batch-nightly
+  namespace: default
+spec:
+  schedule: "*/10 * * * *" 
+  concurrencyPolicy: Forbid
+  template:
+    type: Python
+    pythonVersion: "3"
+    mode: cluster
+    image: "it-jobs-spark:v1" # Dùng chung image với Streaming
+    imagePullPolicy: Never
+    mainApplicationFile: "local:///app/src/processing/batch_job.py" 
+    sparkVersion: "3.5.0"
+    restartPolicy:
+      type: OnFailure
+      onFailureRetries: 1
+    deps:
+      packages:
+        - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0"
+        - "org.elasticsearch:elasticsearch-spark-30_2.12:8.5.1"
+        - "org.apache.hadoop:hadoop-aws:3.3.4"
+        - "org.apache.spark:spark-hadoop-cloud_2.12:3.5.0"
+    driver:
+      cores: 1
+      memory: "512m"
+      serviceAccount: my-release-spark
+    executor:
+      cores: 1
+      instances: 1
+      memory: "512m"
